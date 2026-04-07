@@ -3,9 +3,9 @@
 # ============================================================
 
 # File hasil build
-bin/
-obj/
-iso_root/
+# bin/
+# obj/
+# iso_root/
 
 # File ISO
 *.iso
