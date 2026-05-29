@@ -5,6 +5,7 @@
  * Tema: Tailwind CSS color palette
  */
 
+#include "desktop.hpp"
 #include "console.hpp"
 #include "hal.hpp"
 #include "themes.hpp"
@@ -16,10 +17,14 @@
 
 Taskbar taskbar;
 
-namespace hal {
-namespace desktop {
+namespace Desktop {
+
+Core core;
+Core &get_core() { return core; }
 
 DesktopState dstate;
+DesktopState &get_state() { return dstate; }
+
 static int next_window_id = 1;
 static int32_t wallpaper_cache_w = 0;
 static int32_t wallpaper_cache_h = 0;
@@ -52,8 +57,6 @@ void init(int32_t screen_w, int32_t screen_h) {
   taskbar.width = screen_w;
   taskbar.setTaskbarDock(DockEdge::Bottom);
 }
-
-DesktopState &get_state() { return dstate; }
 
 int find_slot() {
   for (int i = 0; i < MAX_WINDOWS; i++) {
@@ -752,18 +755,49 @@ void render_start_menu() {
                          hover ? TW_WHITE : TW_SLATE_200);
   }
 }
+void render_cursor_efficient(int32_t x, int32_t y) {
+  // Definisi bentuk cursor (x_offset_hitam, x_offset_putih_start,
+  // x_offset_putih_end) Menggunakan static agar tabel ini tidak di-generate
+  // ulang setiap frame
+  static const struct {
+    int8_t border;
+    int8_t start;
+    int8_t end;
+  } shape[] = {{0, 1, 1}, {0, 1, 2},  {0, 1, 3},  {0, 1, 4},
+               {0, 1, 5}, {0, 1, 6},  {0, 1, 7},  {0, 1, 8},
+               {0, 1, 9}, {0, 1, 10}, {0, 1, 10}, {0, 1, 10},
+               {0, 1, 7}, {0, 1, 4},  {0, 1, 1},  {0, 0, 0}};
+
+  for (int i = 0; i < 16; i++) {
+    int iy = y + i;
+
+    // 1. Gambar Border Kiri (Selalu di x)
+    Console::draw_pixel(x, iy, TW_BLACK);
+
+    // 2. Gambar Bagian Putih (Batch fill per baris)
+    for (int j = shape[i].start; j <= shape[i].end; j++) {
+      Console::draw_pixel(x + j, iy, TW_WHITE);
+    }
+
+    // 3. Gambar Border Kanan/Diagonal
+    if (i < 12) {
+      int border_x = x + shape[i].end;
+      Console::draw_pixel(border_x, iy, TW_BLACK);
+    }
+  }
+}
 
 void render_cursor(int32_t x, int32_t y) {
-  /* Cursor segitiga putih dengan border hitam — lebih halus */
-  // for (int i = 0; i < 16; i++) {
-  //   int w = (i < 12) ? (i * 10 / 12) : (10 - (i - 12) * 3);
-  //   for (int j = 0; j <= w && j < 11; j++) {
-  //     Console::draw_pixel(x + j, y + i, TW_WHITE);
-  //   }
-  // }
   /* Border kiri */
   for (int i = 0; i < 16; i++) {
     Console::draw_pixel(x, y + i, TW_BLACK);
+  }
+  /* Cursor segitiga putih dengan border hitam — lebih halus */
+  for (int i = 0; i < 16; i++) {
+    int w = (i < 12) ? (i * 10 / 12) : (10 - (i - 12) * 3);
+    for (int j = 0; j <= w && j < 11; j++) {
+      Console::draw_pixel(x + j, y + i, TW_WHITE);
+    }
   }
   /* Border kanan diagonal */
   for (int i = 0; i < 12; i++) {
@@ -888,8 +922,9 @@ void render_context_menu() {
     }
 
     bool hover =
-        (dstate.cursor_x >= cm.x + 4 && dstate.cursor_x < cm.x + menu_w - 4 &&
-         dstate.cursor_y >= iy && dstate.cursor_y < iy + item_h);
+        (hal::mouse::get_x() >= cm.x + 4 &&
+         hal::mouse::get_x() < cm.x + menu_w - 4 && hal::mouse::get_y() >= iy &&
+         hal::mouse::get_y() < iy + item_h);
     if (hover) {
       Console::fill_rounded_rect(cm.x + 4, iy, menu_w - 8, item_h, 4,
                                  TW_BLUE_600);
@@ -900,6 +935,9 @@ void render_context_menu() {
     iy += item_h;
   }
 }
+
+// uint64_t TIMEOUT = 1;
+// bool HIDE_CURSOR = false;
 
 void render_all() {
   /* Begin double-buffered frame */
@@ -924,7 +962,20 @@ void render_all() {
     render_context_menu();
   }
 
-  render_cursor(dstate.cursor_x, dstate.cursor_y);
+  // if (!hal::mouse::getState().isMoving) {
+  //   if (TIMEOUT > 0 && Desktop::get_core().time.delta.sec != 0)
+  //     TIMEOUT--;
+  // } else {
+  //   TIMEOUT = 1;
+  // }
+  //
+  // if (TIMEOUT <= 0)
+  //   HIDE_CURSOR = true;
+  // else
+  //   HIDE_CURSOR = false;
+  //
+  // if (!HIDE_CURSOR)
+  render_cursor_efficient(hal::mouse::get_x(), hal::mouse::get_y());
 
   /* End frame: copy backbuffer → framebuffer */
   Console::end_frame();
@@ -978,5 +1029,4 @@ int hit_test_minimize_btn(int id, int32_t x, int32_t y) {
   return (x >= bx && x < bx + 20 && y >= by && y < by + 20) ? 1 : 0;
 }
 
-} // namespace desktop
-} // namespace hal
+} // namespace Desktop

@@ -11,19 +11,10 @@
 namespace hal {
 namespace mouse {
 
-/* State mouse */
-struct MState {
-  int32_t x, y;
-  int32_t screen_w, screen_h;
-  bool left, right, middle;
-  bool prev_left, prev_right;
-  /* Packet buffer */
-  uint8_t packet[4];
-  int packet_idx;
-  bool has_wheel;
-  /* Event queue */
-  bool event_pending;
-} mstate;
+MState mstate;
+
+PACKET packets;
+PACKET<> &get_packet() { return packets; }
 
 /* Tunggu mouse controller siap untuk ditulis */
 static void mouse_wait_write() {
@@ -116,76 +107,76 @@ void clamp_xy(int *x, int *y, int min_x, int min_y, int max_x, int max_y) {
 }
 
 /* Dipanggil dari ISR (IRQ12) */
-extern "C" void mouse_handle_packet(uint8_t data) {
-  if (mstate.packet_idx == 0) {
-    if (!(data & 0x08))
-      return;
-  }
+extern "C" void mouse_handle_packet(uint8_t data) { packets.push(data); }
 
-  mstate.packet[mstate.packet_idx++] = data;
-
-  int packet_size = mstate.has_wheel ? 4 : 3;
-
-  if (mstate.packet_idx < packet_size)
-    return;
-
-  mstate.packet_idx = 0;
-
-  /* Validasi: bit 3 dari byte 0 harus selalu set */
-  if (!(mstate.packet[0] & 0x08)) {
-    mstate.packet_idx = 0;
-    return;
-  }
-
-  /* Decode packet */
-  mstate.prev_left = mstate.left;
-  mstate.prev_right = mstate.right;
-
-  mstate.left = (mstate.packet[0] & 0x01) != 0;
-  mstate.right = (mstate.packet[0] & 0x02) != 0;
-  mstate.middle = (mstate.packet[0] & 0x04) != 0;
-
-  int32_t dx = (int8_t)mstate.packet[1];
-  int32_t dy = (int8_t)mstate.packet[2];
-
-  /* Sign extend */
-  if (mstate.packet[0] & 0x10)
-    dx |= 0xFFFFFF00;
-  if (mstate.packet[0] & 0x20)
-    dy |= 0xFFFFFF00;
-
-  /* Overflow check */
-  if (mstate.packet[0] & 0x40)
-    dx = 0;
-  if (mstate.packet[0] & 0x80)
-    dy = 0;
-
-  /* Update posisi (dy terbalik di PS/2) */
-  // static int32_t acc_x = 0, acc_y = 0;
-  //
-  // acc_x += dx;
-  // acc_y += dy;
-
-  // mstate.x += dx; // acc_x;
-  // mstate.y -= dy; // acc_y;
-
-  desktop::get_state().cursor_x += dx;
-  desktop::get_state().cursor_y -= dy;
-
-  // acc_y = acc_x = 0;
-
-  auto &state = desktop::get_state();
-
-  /* Clamp ke layar */
-  clamp_xy(&state.cursor_x, &state.cursor_y, 0, 0, state.screen_w - 1,
-           state.screen_h - 1);
-
-  if (dx == 0 && dy == 0 && mstate.left == mstate.prev_left &&
-      mstate.right == mstate.prev_right)
-    return;
-
-  mstate.event_pending = true;
-}
+// mouse_handle_packet
+// {
+//   mstate.isMoving = true;
+// mstate.prev_x = mstate.x;
+// mstate.prev_y = mstate.y;
+//
+// if (mstate.packet_idx == 0) {
+//   if (!(data & 0x08))
+//     return;
+// }
+//
+// mstate.packet[mstate.packet_idx++] = data;
+//
+// int packet_size = mstate.has_wheel ? 4 : 3;
+//
+// if (mstate.packet_idx < packet_size)
+//   return;
+//
+// mstate.packet_idx = 0;
+//
+// /* Validasi: bit 3 dari byte 0 harus selalu set */
+// if (!(mstate.packet[0] & 0x08)) {
+//   mstate.packet_idx = 0;
+//   return;
+// }
+//
+// /* Decode packet */
+// mstate.prev_left = mstate.left;
+// mstate.prev_right = mstate.right;
+//
+// mstate.left = (mstate.packet[0] & 0x01) != 0;
+// mstate.right = (mstate.packet[0] & 0x02) != 0;
+// mstate.middle = (mstate.packet[0] & 0x04) != 0;
+//
+// int32_t dx = (int8_t)mstate.packet[1];
+// int32_t dy = (int8_t)mstate.packet[2];
+//
+// /* Sign extend */
+// if (mstate.packet[0] & 0x10)
+//   dx |= 0xFFFFFF00;
+// if (mstate.packet[0] & 0x20)
+//   dy |= 0xFFFFFF00;
+//
+// /* Overflow check */
+// if (mstate.packet[0] & 0x40)
+//   dx = 0;
+// if (mstate.packet[0] & 0x80)
+//   dy = 0;
+//
+// mstate.x += dx;
+// mstate.y -= dy;
+//
+// if (mstate.x == mstate.prev_x && mstate.y == mstate.prev_y)
+//   mstate.isMoving = false;
+//
+// // auto &state = desktop::get_state();
+// //
+// // /* Clamp ke layar */
+// // clamp_xy(&state.cursor_x, &state.cursor_y, 0, 0, state.screen_w - 1,
+// //          state.screen_h - 1);
+//
+// if (dx == 0 && dy == 0 && mstate.left == mstate.prev_left &&
+//     mstate.right == mstate.prev_right)
+//   return;
+//
+// mstate.event_pending = true;
+//
+// }
 
 int32_t get_x() { return mstate.x; }
 int32_t get_y() { return mstate.y; }

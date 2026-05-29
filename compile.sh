@@ -22,6 +22,8 @@ VM_NAME=LittleOS_VM
 QEMU_VGA=qxl
 QEMU_DISPLAY=sdl
 
+ENABLE_KVM=true
+
 is() {
   command -v "$1" >/dev/null 2>&1
 }
@@ -123,8 +125,10 @@ make -C $LIMINE_DIR_NAME/
 ./${LIMINE_DIR_NAME}/limine bios-install "${ISO_NAME}.iso"
 
 # PRIORITY: QEMU
-KVM=""
-[ -e /dev/kvm ] && KVM="-enable-kvm"
+KVM=
+if $ENABLE_KVM; then
+  [ -e /dev/kvm ] && KVM="-enable-kvm"
+fi
 
 if is qemu-system-x86_64; then
   echo "-> QEMU detected, launching..."
@@ -135,7 +139,7 @@ if is qemu-system-x86_64; then
     -cdrom "${ISO_NAME}.iso" \
     -vga "$QEMU_VGA" \
     -display "$QEMU_DISPLAY" \
-    "$KVM"
+    $KVM
 
   exit 0
 fi

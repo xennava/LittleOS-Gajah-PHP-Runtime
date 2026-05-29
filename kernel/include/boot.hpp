@@ -4,6 +4,7 @@
 
 #include "hal.hpp"
 #include "limine.h"
+#include "system.hpp"
 #include "themes.hpp"
 #include "utils.hpp"
 #include <stdint.h>
@@ -117,7 +118,7 @@ inline void BOOT_Init(struct limine_framebuffer *fb) {
   hal::timer::calibrate_tsc();
 
   /* Tunggu sebentar agar user bisa lihat boot log */
-  hal::timer::wait_ms(970);
+  hal::timer::wait_ms(550);
 }
 
 inline void BOOT_ANIM(struct limine_framebuffer *fb) {

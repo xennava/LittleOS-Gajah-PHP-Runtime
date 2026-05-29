@@ -282,6 +282,7 @@ void disable() { asm volatile("cli"); }
 #define PIT_CMD 0x43
 
 namespace timer {
+static uint64_t tsc_base = 0;
 static uint64_t tsc_per_ms = 1;
 static uint64_t tsc_per_us = 1;
 static uint64_t tsc_to_ns_mul = 0;
@@ -302,12 +303,17 @@ void init() {
   ports::outb(PIT_CMD, 0x36); /* Channel 0, lobyte/hibyte, square wave */
   ports::outb(PIT_CH0_DATA, (uint8_t)(divisor & 0xFF));
   ports::outb(PIT_CH0_DATA, (uint8_t)((divisor >> 8) & 0xFF));
+
+  tsc_base = rdtscp();
 }
 
 uint64_t get_ticks() { return timer_ticks; }
 uint64_t get_ms() { return timer_ticks; } /* 1 tick = 1ms */
 uint64_t get_seconds() { return timer_ticks / 1000; }
-uint64_t time_ns() { return (rdtscp() * tsc_to_ns_mul) >> 32; }
+uint64_t time_ns() {
+  uint64_t delta_tsc = rdtscp() - tsc_base;
+  return (__uint128_t)delta_tsc * tsc_to_ns_mul >> 32;
+}
 void calibrate_tsc() {
   uint64_t start_ticks = timer_ticks;
 

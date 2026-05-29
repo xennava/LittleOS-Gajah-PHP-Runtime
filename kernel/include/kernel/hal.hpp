@@ -133,6 +133,17 @@ void calibrate_tsc();
  * ============================================================ */
 namespace keyboard {
 
+enum KeyAction : uint8_t { KEY_DOWN, KEY_UP };
+
+struct KeyEvent {
+  uint16_t key;
+  KeyAction action;
+  bool repeated;
+  uint8_t modifiers;
+};
+
+extern bool key_down[];
+
 void init();
 char read_char();
 char read_char_nonblocking();
@@ -148,6 +159,57 @@ bool is_ctrl_held();
  * MOUSE — driver mouse PS/2
  * ============================================================ */
 namespace mouse {
+constexpr uint16_t DEFAULT_PACKET_SIZE_BUF = 512;
+
+template <uint32_t SIZE = DEFAULT_PACKET_SIZE_BUF> class PACKET {
+private:
+  uint8_t packet_data[SIZE];
+  uint32_t head = 0, tail = 0;
+  uint32_t count = 0;
+
+public:
+  bool push(uint8_t v) {
+    if (count >= SIZE)
+      return false;
+
+    packet_data[head] = v;
+    head = (head + 1) % SIZE;
+    count++;
+    return true;
+  }
+
+  bool pop(uint8_t &out) {
+    if (count == 0)
+      return false;
+    count--;
+    out = packet_data[tail];
+    tail = (tail + 1) % SIZE;
+
+    return true;
+  }
+
+  bool empty() const { return count == 0; }
+
+  constexpr uint32_t size() const { return SIZE; }
+};
+
+extern PACKET<> &get_packet();
+
+/* State mouse */
+struct MState {
+  int32_t x, y;
+  int32_t prev_x, prev_y;
+  int32_t screen_w, screen_h;
+  /* Packet buffer */
+  int packet_idx;
+  uint8_t packet[4];
+  bool prev_left, prev_right;
+  bool left, right, middle;
+  bool has_wheel;
+  /* Event queue */
+  bool event_pending;
+  bool isMoving;
+};
 
 void init();
 int32_t get_x();
@@ -155,6 +217,7 @@ int32_t get_y();
 bool is_left_pressed();
 bool is_right_pressed();
 bool has_event();
+MState &getState();
 
 struct MouseEvent {
   int32_t x, y;
@@ -189,99 +252,6 @@ struct DateTime {
 DateTime get_time();
 
 } // namespace rtc
-
-/* ============================================================
- * DESKTOP — Window Manager (C++ backend)
- * ============================================================ */
-namespace desktop {
-
-static const int MAX_WINDOWS = 32;
-static const int TITLE_BAR_H = 28;
-static const int BORDER_W = 1;
-
-enum class WindowState : uint8_t { Normal, Minimized, Maximized, Closed };
-
-struct Window {
-  int32_t id;
-  char title[128];
-  int32_t x, y, w, h;
-  int32_t saved_x, saved_y, saved_w, saved_h;
-  WindowState state;
-  bool active;
-  bool dirty;
-  char text_content[8192];
-  int text_len;
-  int text_scroll;
-  uint32_t bg_color;
-  uint32_t title_color;
-  char app_type[64];
-};
-
-/* Context menu item */
-static const int MAX_CTX_ITEMS = 12;
-struct ContextMenuItem {
-  char label[64];
-  char action[64];
-  bool separator; /* true = garis pemisah, bukan item */
-};
-
-struct ContextMenu {
-  bool visible;
-  int32_t x, y;
-  int item_count;
-  ContextMenuItem items[MAX_CTX_ITEMS];
-};
-
-struct DesktopState {
-  Window windows[MAX_WINDOWS];
-  int window_count;
-  int active_window;
-  int z_order[MAX_WINDOWS];
-  int z_count;
-  bool running;
-  bool needs_redraw;
-  int32_t screen_w, screen_h;
-  bool start_menu_open;
-  bool dragging;
-  int drag_window;
-  int32_t drag_offset_x, drag_offset_y;
-  int32_t cursor_x, cursor_y;
-  ContextMenu context_menu;
-};
-
-void init(int32_t screen_w, int32_t screen_h);
-DesktopState &get_state();
-
-int create_window(const char *title, int32_t x, int32_t y, int32_t w, int32_t h,
-                  const char *app_type);
-void close_window(int id);
-void minimize_window(int id);
-void maximize_window(int id);
-void restore_window(int id);
-void set_active_window(int id);
-void set_window_text(int id, const char *text);
-void append_window_text(int id, const char *text);
-void clear_window_text(int id);
-Window *get_window(int id);
-void bring_to_front(int id);
-
-void render_desktop();
-void render_taskbar();
-void render_window(Window *win);
-void render_start_menu();
-void render_context_menu();
-void render_cursor(int32_t x, int32_t y);
-void render_all();
-
-void open_context_menu(int32_t x, int32_t y, const char *context);
-void close_context_menu();
-
-int hit_test_window(int32_t x, int32_t y);
-int hit_test_close_btn(int id, int32_t x, int32_t y);
-int hit_test_maximize_btn(int id, int32_t x, int32_t y);
-int hit_test_minimize_btn(int id, int32_t x, int32_t y);
-
-} // namespace desktop
 
 /* ============================================================
  * EMBEDDED ASSETS — gambar yang di-embed ke kernel binary

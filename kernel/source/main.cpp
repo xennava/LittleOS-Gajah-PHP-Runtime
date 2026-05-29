@@ -605,7 +605,12 @@ function handle_context_action($action) {
   // ============================================================
 
 desktop_init();
+desktop_time_update();
+
 while (true) {
+
+    xxkernelxx();
+    // desktop_time_update();
 
     $event = desktop_poll_events();
 
@@ -621,29 +626,6 @@ while (true) {
     sleep(16);
 }
 )PHP";
-
-// // aliasses of builtint_desktop_init
-// static const char *php_desktop_init = R"PHP(<?php
-// desktop_init();
-// )PHP";
-//
-// // aliasses of event handler with simplicity
-// static const char *php_event_poll_handler = R"PHP(<?php
-//     $event = desktop_poll_events();
-//
-//     // Handle start menu items
-//     if ($event) {
-//       open_app($event);
-//
-//     // Handle context menu actions
-//       handle_context_action($event);
-//     }
-// )PHP";
-//
-// // aliasses of builtint_desktop_render();
-// static const char *php_desktop_render = R"PHP(<?php
-// desktop_render();
-// )PHP";
 
 /* ============================================================
  * KERNEL ENTRY POINT — kmain()

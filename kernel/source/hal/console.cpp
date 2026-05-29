@@ -9,6 +9,7 @@
 #include "hal.hpp"
 #include "kernel.hpp"
 #include "themes.hpp"
+#include "utils.hpp"
 #include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
@@ -30,8 +31,7 @@ void draw_pixel(int32_t x, int32_t y, uint32_t color) {
     return;
   uint32_t *target =
       state.render_target ? state.render_target : state.framebuffer;
-  uint32_t *pixel =
-      (uint32_t *)((uint8_t *)target + y * state.fb_pitch + x * 4);
+  uint32_t *pixel = (uint32_t *)((uint8_t *)target + y * state.fb_pitch) + x;
   *pixel = color;
 }
 
@@ -217,7 +217,7 @@ void puts(const char *s) {
   if (!s)
     return;
   while (*s) {
-    putchar(*s);
+    putchar_transparent(*s);
     s++;
   }
 }
@@ -275,14 +275,12 @@ void printf(const char *fmt, ...) {
       }
       case 'd': {
         int64_t n = va_arg(args, int64_t);
-        put_number(n);
+        numstream(n);
         break;
       }
       case 'u': {
         uint64_t n = va_arg(args, uint64_t);
-        char buf[32];
-        hal::string::utoa(n, buf);
-        puts(buf);
+        numstream(n);
         break;
       }
       case 'x': {
@@ -292,20 +290,20 @@ void printf(const char *fmt, ...) {
       }
       case 'c': {
         char c = (char)va_arg(args, int);
-        putchar(c);
+        putchar_transparent(c);
         break;
       }
       case '%': {
-        putchar('%');
+        putchar_transparent('%');
         break;
       }
       default:
-        putchar('%');
-        putchar(*fmt);
+        putchar_transparent('%');
+        putchar_transparent(*fmt);
         break;
       }
     } else {
-      putchar(*fmt);
+      putchar_transparent(*fmt);
     }
     fmt++;
   }
@@ -509,6 +507,21 @@ void blit_raw(int32_t dx, int32_t dy, int32_t sw, int32_t sh,
       *pixel = c;
     }
   }
+}
+
+namespace general {
+
+template <auto Action> inline void resolve_overflow(int current, int limit) {
+  if (current >= limit)
+    Action();
+}
+} // namespace general
+
+void resolve_newline(int current, int limit, int lines_to_skip = 1) {
+  if (current >= limit)
+    while (lines_to_skip-- > 0) {
+      Console::newline();
+    }
 }
 
 } // namespace Console

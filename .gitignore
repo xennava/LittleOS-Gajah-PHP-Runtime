@@ -3,9 +3,9 @@
 # ============================================================
 
 # File hasil build
-# bin/
-# obj/
-# iso_root/
+bin/
+obj/
+iso_root/
 
 # File ISO
 *.iso
@@ -27,10 +27,14 @@ Limine/
 Thumbs.db
 .DS_Store
 
+build/
+test/
+iso_root/
 # File Assets (design source files, large binaries)
 #assets/
 
 # Screenshot / debug test files
 test_screenshot*.png
 *.log
+*.txt
 build_output.txt

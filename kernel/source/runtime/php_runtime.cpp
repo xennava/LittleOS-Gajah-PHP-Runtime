@@ -22,8 +22,9 @@
 
 #include "php_runtime.hpp"
 #include "console.hpp"
+#include "desktop.hpp"
 #include "hal.hpp"
-#include "kernel.hpp"
+#include "system.hpp"
 #include "themes.hpp"
 #include "ui.hpp"
 #include <string.h>
@@ -472,7 +473,7 @@ bool PhpParser::expect(TokenType type) {
     return true;
   }
   /* Error: token tidak sesuai */
-  Console::printf("[PHP Error] Baris %d: diharapkan token %d, dapat '%s'\n",
+  Console::printf("[PHP Error] Baris %d: diharapkan token %d, dapat '%s'",
                   lex->get_line(), (int)type, current.text);
   return false;
 }
@@ -1828,7 +1829,10 @@ PhpValue *PhpInterpreter::eval_call(AstNode *node) {
     return result;
   }
 
-  Console::printf("[PHP Error] Fungsi '%s' tidak ditemukan\n", node->name);
+  Console::state.cursor_row = 0;
+  Console::state.cursor_col = 0;
+  Console::state.fg_color = TW_BLACK;
+  Console::printf("[PHP Error] Fungsi '%s' tidak ditemukan", node->name);
   return create_null();
 }
 
@@ -2566,7 +2570,7 @@ static PhpValue *builtin_keyboard_has_input(PhpInterpreter *interp, PhpValue **,
  * ============================================================ */
 static PhpValue *builtin_desktop_init(PhpInterpreter *interp, PhpValue **,
                                       int) {
-  hal::desktop::init(Console::get_fb_width(), Console::get_fb_height());
+  Desktop::init(Console::get_fb_width(), Console::get_fb_height());
   return interp->create_null();
 }
 
@@ -2580,7 +2584,7 @@ static PhpValue *builtin_desktop_create_window(PhpInterpreter *interp,
   int32_t w = (int32_t)interp->value_to_int(args[3]);
   int32_t h = (int32_t)interp->value_to_int(args[4]);
   const char *app_type = interp->value_to_cstr(args[5]);
-  int id = hal::desktop::create_window(title, x, y, w, h, app_type);
+  int id = Desktop::create_window(title, x, y, w, h, app_type);
   return interp->create_int((int64_t)id);
 }
 
@@ -2588,7 +2592,7 @@ static PhpValue *builtin_desktop_close_window(PhpInterpreter *interp,
                                               PhpValue **args, int argc) {
   if (argc >= 1) {
     int id = (int)interp->value_to_int(args[0]);
-    hal::desktop::close_window(id);
+    Desktop::close_window(id);
   }
   return interp->create_null();
 }
@@ -2598,14 +2602,14 @@ static PhpValue *builtin_desktop_set_text(PhpInterpreter *interp,
   if (argc >= 2) {
     int id = (int)interp->value_to_int(args[0]);
     const char *text = interp->value_to_cstr(args[1]);
-    hal::desktop::set_window_text(id, text);
+    Desktop::set_window_text(id, text);
   }
   return interp->create_null();
 }
 
 static PhpValue *builtin_desktop_render(PhpInterpreter *interp, PhpValue **,
                                         int) {
-  hal::desktop::render_all();
+  Desktop::render_all();
   return interp->create_null();
 }
 
@@ -2613,9 +2617,10 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
                                              PhpValue **, int) {
   /* Poll mouse dan update desktop state */
   hal::mouse::MouseEvent ev = hal::mouse::poll_event();
-  hal::desktop::DesktopState &ds = hal::desktop::get_state();
+  Desktop::DesktopState &ds = Desktop::get_state();
 
-  int mx = ds.cursor_x, my = ds.cursor_y;
+  int mx = ds.cursor_x = hal::mouse::get_x(),
+      my = ds.cursor_y = hal::mouse::get_y();
 
   int32_t ty = taskbar.get('y');
 
@@ -2626,25 +2631,25 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
 
     /* Cek klik kanan pada context menu yang sudah terbuka — abaikan */
     if (ds.context_menu.visible) {
-      hal::desktop::close_context_menu();
+      Desktop::close_context_menu();
       return interp->create_null();
     }
 
     /* Klik kanan di taskbar */
     if (my >= ty) {
-      hal::desktop::open_context_menu(mx, my, "taskbar");
+      Desktop::open_context_menu(mx, my, "taskbar");
       return interp->create_null();
     }
 
     /* Klik kanan di window */
-    int hit_id = hal::desktop::hit_test_window(mx, my);
+    int hit_id = Desktop::hit_test_window(mx, my);
     if (hit_id > 0) {
-      hal::desktop::open_context_menu(mx, my, "window");
+      Desktop::open_context_menu(mx, my, "window");
       return interp->create_null();
     }
 
     /* Klik kanan di desktop */
-    hal::desktop::open_context_menu(mx, my, "desktop");
+    Desktop::open_context_menu(mx, my, "desktop");
     return interp->create_null();
   }
 
@@ -2652,7 +2657,7 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
   if (ev.clicked) {
     /* Tutup context menu dulu jika visible */
     if (ds.context_menu.visible) {
-      hal::desktop::ContextMenu &cm = ds.context_menu;
+      Desktop::ContextMenu &cm = ds.context_menu;
       /* Cek klik di dalam context menu */
       int32_t menu_w = 210;
       int32_t item_h = 28;
@@ -2668,13 +2673,13 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
           char action[64];
           hal::string::strncpy(action, cm.items[i].action, 63);
           action[63] = '\0';
-          hal::desktop::close_context_menu();
+          Desktop::close_context_menu();
           return interp->create_string(action);
         }
         iy += item_h;
       }
       /* Klik di luar context menu — tutup */
-      hal::desktop::close_context_menu();
+      Desktop::close_context_menu();
       return interp->create_null();
     }
 
@@ -2728,17 +2733,17 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
       int bx = px;
       for (int i = 0; i < ds.z_count && bx < ds.screen_w - 260; i++) {
         int idx = ds.z_order[i];
-        hal::desktop::Window &win = ds.windows[idx];
-        if (win.id < 0 || win.state == hal::desktop::WindowState::Closed)
+        Desktop::Window &win = ds.windows[idx];
+        if (win.id < 0 || win.state == Desktop::WindowState::Closed)
           continue;
 
         if (mx >= bx && mx < bx + 150 && my >= ty + 3 &&
             my < ty + TASKBAR_HEIGHT - 3) {
           /* Klik pada taskbar button — restore/focus */
-          if (win.state == hal::desktop::WindowState::Minimized) {
-            hal::desktop::restore_window(win.id);
+          if (win.state == Desktop::WindowState::Minimized) {
+            Desktop::restore_window(win.id);
           }
-          hal::desktop::bring_to_front(win.id);
+          Desktop::bring_to_front(win.id);
           return interp->create_string("window_focused");
         }
         bx += 158;
@@ -2746,29 +2751,29 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
     }
 
     /* Check window interactions */
-    int hit_id = hal::desktop::hit_test_window(mx, my);
+    int hit_id = Desktop::hit_test_window(mx, my);
     if (hit_id > 0) {
       /* Check close button */
-      if (hal::desktop::hit_test_close_btn(hit_id, mx, my)) {
-        hal::desktop::close_window(hit_id);
+      if (Desktop::hit_test_close_btn(hit_id, mx, my)) {
+        Desktop::close_window(hit_id);
         return interp->create_string("window_closed");
       }
       /* Check maximize button */
-      if (hal::desktop::hit_test_maximize_btn(hit_id, mx, my)) {
-        hal::desktop::maximize_window(hit_id);
+      if (Desktop::hit_test_maximize_btn(hit_id, mx, my)) {
+        Desktop::maximize_window(hit_id);
         return interp->create_string("window_maximized");
       }
       /* Check minimize button */
-      if (hal::desktop::hit_test_minimize_btn(hit_id, mx, my)) {
-        hal::desktop::minimize_window(hit_id);
+      if (Desktop::hit_test_minimize_btn(hit_id, mx, my)) {
+        Desktop::minimize_window(hit_id);
         return interp->create_string("window_minimized");
       }
       /* Bring window to front */
-      hal::desktop::bring_to_front(hit_id);
+      Desktop::bring_to_front(hit_id);
 
       /* Start dragging if on title bar */
-      hal::desktop::Window *win = hal::desktop::get_window(hit_id);
-      if (win && my >= win->y && my < win->y + hal::desktop::TITLE_BAR_H) {
+      Desktop::Window *win = Desktop::get_window(hit_id);
+      if (win && my >= win->y && my < win->y + Desktop::TITLE_BAR_H) {
         ds.dragging = true;
         ds.drag_window = hit_id;
         ds.drag_offset_x = mx - win->x;
@@ -2784,14 +2789,24 @@ static PhpValue *builtin_desktop_poll_events(PhpInterpreter *interp,
 
   /* Handle dragging */
   if (ds.dragging && ds.drag_window > 0) {
-    hal::desktop::Window *win = hal::desktop::get_window(ds.drag_window);
-    if (win && win->state == hal::desktop::WindowState::Normal) {
+    Desktop::Window *win = Desktop::get_window(ds.drag_window);
+    if (win && win->state == Desktop::WindowState::Normal) {
       win->x = mx - ds.drag_offset_x;
       win->y = my - ds.drag_offset_y;
       ds.needs_redraw = true;
     }
   }
   return interp->create_null();
+}
+
+PhpValue *kernel_update(PhpInterpreter *irp, PhpValue **, int) {
+  // Time Update
+  Desktop::get_core().time.update(hal::timer::time_ns());
+
+  // Mouse Handler
+  sys::proc_mouse(hal::mouse::getState());
+
+  return irp->create_null();
 }
 
 /* ============================================================
@@ -2885,6 +2900,7 @@ void PhpRuntime::register_kernel_builtins() {
   interpreter.register_builtin("desktop_render", builtin_desktop_render);
   interpreter.register_builtin("desktop_poll_events",
                                builtin_desktop_poll_events);
+  interpreter.register_builtin("xxkernelxx", kernel_update);
 }
 
 void PhpRuntime::execute_script(const char *source) {

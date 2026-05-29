@@ -2,10 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_ASM_NASM_COMPILER nasm)
-project(LittleOS LANGUAGES CXX C ASM_NASM)
+project(LittleOS LANGUAGES CXX ASM_NASM)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -25,8 +24,11 @@ set(ASM_SRC
 )
 
 include_directories(kernel/include)
+include_directories(kernel/include/kernel)
+include_directories(kernel/include/runtime)
+include_directories(kernel/include/userland)
 
-file(GLOB KERNEL_SRC
+file(GLOB_RECURSE KERNEL_SRC
     kernel/source/*.c
     kernel/source/*.cpp
 )
@@ -44,7 +46,7 @@ set_target_properties(kernel PROPERTIES
 target_compile_options(kernel PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:
     -ffreestanding
-    -O2
+    -O3
     -Wall
     -Wextra
     -Werror
