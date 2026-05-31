@@ -43,12 +43,6 @@ void sys::proc_mouse(hal::mouse::MState &mstate) {
     int32_t dx = (int8_t)mstate.packet[1];
     int32_t dy = (int8_t)mstate.packet[2];
 
-    /* Sign extend */
-    // if (mstate.packet[0] & 0x10)
-    //   dx |= 0xFFFFFF00;
-    // if (mstate.packet[0] & 0x20)
-    //   dy |= 0xFFFFFF00;
-
     /* Overflow check */
     if (mstate.packet[0] & 0x40)
       dx = 0;

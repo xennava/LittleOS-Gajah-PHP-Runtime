@@ -1,5 +1,6 @@
 #include "utils.hpp"
 #include "console.hpp"
+#include "pow10.hpp"
 #include <stdint.h>
 
 void numstream(int64_t u, int x, int y) {
@@ -22,38 +23,30 @@ void numstream(int64_t u, int x, int y) {
     return;
   }
 
-  char sign = -1 * (u < 0);
-
-  if (sign < 0)
-    u = -u;
-
-  const uint8_t base = 10;
-  int64_t big = 1;
-  int max_digit = 0;
-
-  int64_t ut = u;
-  while (ut > 0) {
-    max_digit++;
-    big *= base;
-    ut /= base;
-  }
-
-  if (sign < 0) {
+  if (u < 0) {
     Console::draw_char_transparent(Console::state.cursor_col * Console::CELL_W,
                                    y, '-', Console::state.fg_color);
     Console::state.cursor_col++;
+    u = -u;
   }
 
-  uint8_t prev_num = 0;
-  for (; max_digit > 0; max_digit--) {
-    big /= base;
-    ut = u / big;
+  int8_t big = 0;
+
+  int64_t digit = 10;
+  while (digit <= u) {
+    big++;
+    digit *= 10;
+  }
+
+  uint64_t rem = u;
+  while (big >= 0) {
+    digit = rem / num::pow10[big];
     Console::draw_char_transparent(Console::state.cursor_col * Console::CELL_W,
-                                   y, '0' + ut - base * prev_num,
-                                   Console::state.fg_color);
-    prev_num = ut;
+                                   y, '0' + digit, Console::state.fg_color);
     Console::state.cursor_col++;
     if (Console::state.cursor_col >= Console::state.max_cols)
       Console::newline();
+    rem -= digit * num::pow10[big];
+    big--;
   }
 }

@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-extern "C" void numstream(int64_t u, int x = -1, int y = -1);
+extern void numstream(int64_t u, int x = -1, int y = -1);
 extern "C" void print(const char *fmr, ...);
 
 inline void clamp_to_screen(int32_t &x, int32_t &y, int32_t min_x,
